@@ -1,0 +1,4 @@
+*.so
+*.o
+rr_test.log
+test_runtime
