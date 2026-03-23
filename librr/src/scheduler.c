@@ -131,7 +131,14 @@ static void scheduler_loop(void) {
         uint64_t from_id = g_current ? g_current->id : 0;
         uint64_t to_id = next->id;
         if (from_id != to_id) {
-            rr_log_sched(from_id, to_id);
+            if (rr_replay_active()) {
+                if (rr_replay_expect_sched(from_id, to_id) != 0) {
+                    rr_debugf("[rr-replay] failed to validate sched event\n");
+                    abort();
+                }
+            } else {
+                rr_log_sched(from_id, to_id);
+            }
         }
 
         g_current = next;

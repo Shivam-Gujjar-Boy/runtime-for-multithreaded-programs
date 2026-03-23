@@ -15,15 +15,24 @@ Build outputs:
 - `librr/librr.so` (release, `-O2 -g`)
 - `librr/librr_debug.so` (`make debug`, with ASAN)
 
-## Run (record mode)
+## Run
 
 ```bash
 LD_PRELOAD=/path/to/librr.so RR_MODE=record RR_LOG=/tmp/rr.log ./target_binary
 ```
 
+```bash
+LD_PRELOAD=/path/to/librr.so RR_MODE=replay RR_LOG=/tmp/rr.log ./target_binary
+```
+
 Environment variables:
-- `RR_MODE=record`: enables record mode. If unset or different, wrappers pass through.
+- `RR_MODE=record`: enables record mode.
+- `RR_MODE=replay`: enables replay mode from `RR_LOG`.
+- If `RR_MODE` is unset/other: runtime still supports uthreads, but syscalls pass through.
 - `RR_LOG=/path/to/file`: log path (default: `rr.log`)
+- `RR_REPLAY_TIME=virtual|real` (replay mode only):
+	- `virtual` (default) replays recorded `clock_gettime/gettimeofday` values for deterministic in-process elapsed times.
+	- `real` still consumes replay events but returns real wall-clock time for benchmarking.
 - `RR_DEBUG=1`: emit debug traces to stderr
 - `RR_STACK_SIZE=<bytes>`: uthread stack size (default: `2097152`)
 
@@ -63,6 +72,7 @@ librr/
 	- `EV_SYSCALL`, `EV_SIGNAL`, `EV_SCHED`
 	- monotonic `rr_seq` starting at 1
 - Log buffering with userspace ring buffer (4 MB), flush-on-full and flush-on-exit.
+- Replay mode that consumes `EV_SYSCALL` events in strict sequence order and returns recorded syscall results/data.
 
 ## Public API
 
@@ -81,9 +91,8 @@ make test
 
 This builds and runs a small harness that exercises create/yield/join and wrapped read/write paths under record mode.
 
-## Explicitly not implemented yet (future replay phase)
+## Explicitly not implemented yet
 
-- Replay-mode execution
 - `rdtsc` / `rdrand` interception
 - Delivery of logged signals to user handlers
 - `fork` / `exec` support
@@ -100,3 +109,4 @@ This builds and runs a small harness that exercises create/yield/join and wrappe
 - RT signals are logged but not re-delivered to target handlers.
 - `setjmp`/`longjmp` across uthread boundaries is undefined.
 - ASAN + `LD_PRELOAD` debug runs can be fragile.
+- Replay restores at most the first 64 bytes of read-like returned data per syscall event (per current log schema).

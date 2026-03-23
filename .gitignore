@@ -1,4 +1,15 @@
 *.so
 *.o
-rr_test.log
-test_runtime
+*.debug.o
+core
+core.*
+
+# librr build/test artifacts
+librr/librr_debug.so
+librr/test/test_runtime
+librr/test_code
+librr/test_pthread
+
+# runtime logs
+rr.log
+*.log

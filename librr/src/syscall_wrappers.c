@@ -47,6 +47,19 @@ static int raw_to_int(int32_t raw) {
     return (int)raw;
 }
 
+static int replay_get_event(int32_t nr, rr_replay_syscall_event_t *ev) {
+    uint64_t utid = 0;
+    uthread_t *cur = rr_scheduler_current();
+    if (cur != NULL) {
+        utid = cur->id;
+    }
+
+    if (rr_replay_next_syscall(nr, utid, ev) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 ssize_t read(int fd, void *buf, size_t count) {
     static ssize_t (*real_read)(int, void *, size_t) = NULL;
     if (!real_read) {
@@ -54,7 +67,30 @@ ssize_t read(int fd, void *buf, size_t count) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_read, &ev) != 0) {
+                return -1;
+            }
+            if (ev.retval > 0 && buf != NULL) {
+                size_t to_copy = (size_t)ev.retval;
+                if (to_copy > count) {
+                    to_copy = count;
+                }
+                if (to_copy > ev.data_len) {
+                    to_copy = ev.data_len;
+                }
+                memcpy(buf, ev.data, to_copy);
+            }
+            return raw_to_ssize(ev.retval);
+        }
         return real_read(fd, buf, count);
+    }
+
+    if (count == 0) {
+        ssize_t ret = real_read(fd, buf, count);
+        rr_log_syscall(__NR_read, ret == -1 ? -errno : (int32_t)ret, (uint64_t)fd, NULL, 0);
+        return ret;
     }
 
     int32_t raw = rr_io_submit_read_and_wait(fd, buf, count);
@@ -72,7 +108,20 @@ ssize_t write(int fd, const void *buf, size_t count) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_write, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_ssize(ev.retval);
+        }
         return real_write(fd, buf, count);
+    }
+
+    if (count == 0) {
+        ssize_t ret = real_write(fd, buf, count);
+        rr_log_syscall(__NR_write, ret == -1 ? -errno : (int32_t)ret, (uint64_t)fd, NULL, 0);
+        return ret;
     }
 
     int32_t raw = rr_io_submit_write_and_wait(fd, buf, count);
@@ -88,6 +137,23 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_recvfrom, &ev) != 0) {
+                return -1;
+            }
+            if (ev.retval > 0 && buf != NULL) {
+                size_t to_copy = (size_t)ev.retval;
+                if (to_copy > len) {
+                    to_copy = len;
+                }
+                if (to_copy > ev.data_len) {
+                    to_copy = ev.data_len;
+                }
+                memcpy(buf, ev.data, to_copy);
+            }
+            return raw_to_ssize(ev.retval);
+        }
         return real_recv(sockfd, buf, len, flags);
     }
 
@@ -106,6 +172,13 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_sendto, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_ssize(ev.retval);
+        }
         return real_send(sockfd, buf, len, flags);
     }
 
@@ -122,6 +195,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_accept, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_int(ev.retval);
+        }
         return real_accept(sockfd, addr, addrlen);
     }
 
@@ -138,6 +218,13 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_connect, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_int(ev.retval);
+        }
         return real_connect(sockfd, addr, addrlen);
     }
 
@@ -162,6 +249,13 @@ int openat(int dirfd, const char *pathname, int flags, ...) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_openat, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_int(ev.retval);
+        }
         if ((flags & O_CREAT) != 0) {
             return real_openat(dirfd, pathname, flags, mode);
         }
@@ -181,6 +275,13 @@ int close(int fd) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_close, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_int(ev.retval);
+        }
         return real_close(fd);
     }
 
@@ -197,6 +298,13 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
     }
 
     if (!rr_active()) {
+        if (rr_replay_active()) {
+            rr_replay_syscall_event_t ev;
+            if (replay_get_event(__NR_nanosleep, &ev) != 0) {
+                return -1;
+            }
+            return raw_to_int(ev.retval);
+        }
         return real_nanosleep(req, rem);
     }
 
@@ -243,6 +351,24 @@ int clock_gettime(clockid_t clock_id, struct timespec *tp) {
         real_clock_gettime = (int(*)(clockid_t, struct timespec *))dlsym(RTLD_NEXT, "clock_gettime");
     }
 
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_clock_gettime, &ev) != 0) {
+            return -1;
+        }
+        if (!g_rr_config.replay_time_virtual) {
+            return real_clock_gettime(clock_id, tp);
+        }
+        if (ev.retval >= 0) {
+            size_t to_copy = ev.data_len;
+            if (to_copy > sizeof(*tp)) {
+                to_copy = sizeof(*tp);
+            }
+            memcpy(tp, ev.data, to_copy);
+        }
+        return raw_to_int(ev.retval);
+    }
+
     int rc = real_clock_gettime(clock_id, tp);
     if (rr_active()) {
         rr_log_syscall(__NR_clock_gettime, to_log_int(rc), (uint64_t)clock_id, tp, rc == 0 ? (uint32_t)sizeof(*tp) : 0);
@@ -254,6 +380,24 @@ int gettimeofday(struct timeval *tv, void *tz) {
     static int (*real_gettimeofday)(struct timeval *, void *) = NULL;
     if (!real_gettimeofday) {
         real_gettimeofday = (int(*)(struct timeval *, void *))dlsym(RTLD_NEXT, "gettimeofday");
+    }
+
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_gettimeofday, &ev) != 0) {
+            return -1;
+        }
+        if (!g_rr_config.replay_time_virtual) {
+            return real_gettimeofday(tv, tz);
+        }
+        if (ev.retval >= 0) {
+            size_t to_copy = ev.data_len;
+            if (to_copy > sizeof(*tv)) {
+                to_copy = sizeof(*tv);
+            }
+            memcpy(tv, ev.data, to_copy);
+        }
+        return raw_to_int(ev.retval);
     }
 
     int rc = real_gettimeofday(tv, tz);
@@ -269,6 +413,14 @@ pid_t getpid(void) {
         real_getpid = (pid_t(*)(void))dlsym(RTLD_NEXT, "getpid");
     }
 
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_getpid, &ev) != 0) {
+            return -1;
+        }
+        return (pid_t)raw_to_int(ev.retval);
+    }
+
     pid_t rc = real_getpid();
     if (rr_active()) {
         rr_log_syscall(__NR_getpid, (int32_t)rc, 0, NULL, 0);
@@ -280,6 +432,14 @@ uid_t getuid(void) {
     static uid_t (*real_getuid)(void) = NULL;
     if (!real_getuid) {
         real_getuid = (uid_t(*)(void))dlsym(RTLD_NEXT, "getuid");
+    }
+
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_getuid, &ev) != 0) {
+            return (uid_t)-1;
+        }
+        return (uid_t)raw_to_int(ev.retval);
     }
 
     uid_t rc = real_getuid();
@@ -295,6 +455,21 @@ int uname(struct utsname *buf) {
         real_uname = (int(*)(struct utsname *))dlsym(RTLD_NEXT, "uname");
     }
 
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_uname, &ev) != 0) {
+            return -1;
+        }
+        if (ev.retval >= 0 && buf != NULL) {
+            size_t to_copy = ev.data_len;
+            if (to_copy > sizeof(*buf)) {
+                to_copy = sizeof(*buf);
+            }
+            memcpy(buf, ev.data, to_copy);
+        }
+        return raw_to_int(ev.retval);
+    }
+
     int rc = real_uname(buf);
     if (rr_active()) {
         rr_log_syscall(__NR_uname, to_log_int(rc), 0, buf, rc == 0 ? (uint32_t)sizeof(*buf) : 0);
@@ -306,6 +481,21 @@ int stat(const char *path, struct stat *st) {
     static int (*real_stat)(const char *, struct stat *) = NULL;
     if (!real_stat) {
         real_stat = (int(*)(const char *, struct stat *))dlsym(RTLD_NEXT, "stat");
+    }
+
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_stat, &ev) != 0) {
+            return -1;
+        }
+        if (ev.retval >= 0) {
+            size_t to_copy = ev.data_len;
+            if (to_copy > sizeof(*st)) {
+                to_copy = sizeof(*st);
+            }
+            memcpy(st, ev.data, to_copy);
+        }
+        return raw_to_int(ev.retval);
     }
 
     int rc = real_stat(path, st);
@@ -321,6 +511,21 @@ int fstat(int fd, struct stat *st) {
         real_fstat = (int(*)(int, struct stat *))dlsym(RTLD_NEXT, "fstat");
     }
 
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_fstat, &ev) != 0) {
+            return -1;
+        }
+        if (ev.retval >= 0) {
+            size_t to_copy = ev.data_len;
+            if (to_copy > sizeof(*st)) {
+                to_copy = sizeof(*st);
+            }
+            memcpy(st, ev.data, to_copy);
+        }
+        return raw_to_int(ev.retval);
+    }
+
     int rc = real_fstat(fd, st);
     if (rr_active()) {
         rr_log_syscall(__NR_fstat, to_log_int(rc), (uint64_t)fd, st, rc == 0 ? (uint32_t)sizeof(*st) : 0);
@@ -334,6 +539,21 @@ int lstat(const char *path, struct stat *st) {
         real_lstat = (int(*)(const char *, struct stat *))dlsym(RTLD_NEXT, "lstat");
     }
 
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_lstat, &ev) != 0) {
+            return -1;
+        }
+        if (ev.retval >= 0) {
+            size_t to_copy = ev.data_len;
+            if (to_copy > sizeof(*st)) {
+                to_copy = sizeof(*st);
+            }
+            memcpy(st, ev.data, to_copy);
+        }
+        return raw_to_int(ev.retval);
+    }
+
     int rc = real_lstat(path, st);
     if (rr_active()) {
         rr_log_syscall(__NR_lstat, to_log_int(rc), (uint64_t)(uintptr_t)path, st, rc == 0 ? (uint32_t)sizeof(*st) : 0);
@@ -345,6 +565,28 @@ char *getcwd(char *buf, size_t size) {
     static char *(*real_getcwd)(char *, size_t) = NULL;
     if (!real_getcwd) {
         real_getcwd = (char *(*)(char *, size_t))dlsym(RTLD_NEXT, "getcwd");
+    }
+
+    if (rr_replay_active()) {
+        rr_replay_syscall_event_t ev;
+        if (replay_get_event(__NR_getcwd, &ev) != 0) {
+            return NULL;
+        }
+        if (ev.retval < 0) {
+            errno = -ev.retval;
+            return NULL;
+        }
+
+        if (buf != NULL && size > 0) {
+            size_t to_copy = ev.data_len;
+            if (to_copy >= size) {
+                to_copy = size - 1U;
+            }
+            memcpy(buf, ev.data, to_copy);
+            buf[to_copy] = '\0';
+            return buf;
+        }
+        return NULL;
     }
 
     char *rc = real_getcwd(buf, size);

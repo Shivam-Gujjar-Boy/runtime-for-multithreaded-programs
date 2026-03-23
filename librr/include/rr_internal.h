@@ -83,6 +83,8 @@ typedef struct {
 
 typedef struct {
     bool mode_record;
+    bool mode_replay;
+    bool replay_time_virtual;
     bool runtime_ready;
     bool debug;
     size_t stack_size;
@@ -100,6 +102,7 @@ extern rr_config_t g_rr_config;
 extern uint64_t g_rr_seq;
 
 bool rr_active(void);
+bool rr_replay_active(void);
 void rr_mark_runtime_ready(void);
 
 void rr_debugf(const char *fmt, ...);
@@ -110,6 +113,20 @@ void rr_record_flush(void);
 void rr_log_syscall(int32_t nr, int32_t retval, uint64_t arg0, const void *data, uint32_t data_len);
 void rr_log_signal(uint32_t signo, uint32_t active_uthread);
 void rr_log_sched(uint64_t from_id, uint64_t to_id);
+
+typedef struct {
+    uint64_t seq;
+    int32_t nr;
+    int32_t retval;
+    uint64_t arg0;
+    uint8_t data[64];
+    uint32_t data_len;
+} rr_replay_syscall_event_t;
+
+int rr_replay_init(const char *log_path);
+void rr_replay_shutdown(void);
+int rr_replay_next_syscall(int32_t expected_nr, uint64_t expected_uthread_id, rr_replay_syscall_event_t *out_ev);
+int rr_replay_expect_sched(uint64_t expected_from_id, uint64_t expected_to_id);
 
 int rr_io_init(unsigned entries);
 void rr_io_shutdown(void);

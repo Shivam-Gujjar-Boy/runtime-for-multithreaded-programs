@@ -10,6 +10,7 @@ SRC := \
 	src/io_uring.c \
 	src/signal.c \
 	src/record.c \
+	src/replay.c \
 	src/log.c
 
 OBJ_RELEASE := $(SRC:.c=.o)

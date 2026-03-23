@@ -12,6 +12,8 @@
 
 rr_config_t g_rr_config = {
     .mode_record = false,
+    .mode_replay = false,
+    .replay_time_virtual = true,
     .runtime_ready = false,
     .debug = false,
     .stack_size = RR_DEFAULT_STACK_SIZE,
@@ -51,6 +53,10 @@ static int rr_resolve_real_io(void) {
 
 bool rr_active(void) {
     return g_rr_config.mode_record && g_rr_config.runtime_ready;
+}
+
+bool rr_replay_active(void) {
+    return g_rr_config.mode_replay && g_rr_config.runtime_ready;
 }
 
 void rr_mark_runtime_ready(void) {

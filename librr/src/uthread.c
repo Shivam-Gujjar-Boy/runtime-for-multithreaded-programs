@@ -220,7 +220,7 @@ void rr_uthread_shutdown(void) {
 }
 
 uint64_t uthread_create(void (*fn)(void *), void *arg) {
-    if (!rr_active()) {
+    if (!g_rr_config.runtime_ready) {
         errno = ENOSYS;
         return 0;
     }
@@ -233,14 +233,14 @@ uint64_t uthread_create(void (*fn)(void *), void *arg) {
 }
 
 void uthread_yield(void) {
-    if (!rr_active()) {
+    if (!g_rr_config.runtime_ready) {
         return;
     }
     rr_scheduler_yield_current();
 }
 
 void uthread_exit(void *retval) {
-    if (!rr_active()) {
+    if (!g_rr_config.runtime_ready) {
         _exit(0);
     }
 
@@ -249,7 +249,7 @@ void uthread_exit(void *retval) {
 }
 
 int uthread_join(uint64_t id, void **out) {
-    if (!rr_active()) {
+    if (!g_rr_config.runtime_ready) {
         errno = ENOSYS;
         return -1;
     }
